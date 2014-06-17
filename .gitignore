@@ -1,0 +1,11 @@
+# History files
+.Rhistory
+
+# Example code in package build process
+
+
+# R data files from past sessions
+.Rdata
+
+# Ignoring directory
+data/
