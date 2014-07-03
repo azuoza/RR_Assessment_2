@@ -1,0 +1,304 @@
+---
+title: 'Weahter events impact to health (Reproducible Research: Peer Assessment 2)'
+author: "A. Zuoza"
+date: "Tuesday, June 23, 2014"
+output: html_document
+---
+
+In this report I aim to describe storms and other severe weather events (1) 
+that are most harmful with respect to population health and (2) that have
+the greatest economic consequences in the US.
+For this report US is 50 states and DC. 
+
+To know what weather event is most harmful and have greatest economic consequences can be important to insurance companies and local goverments. 
+Insurance companies can ajust their "payments" according to this informations and local autorities can better paln their budget for next year. 
+My hypothesis is that the most harmful weather event is tornado 
+and the bigges economic consequences have floods or hails. 
+To investigate this hypothesis I downloaded National Weather Service Storm data from Coursera webpage.
+
+- The data can be found in [Coursera web page](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2)
+- National Weather Service [Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+- National Climatic Data Center Storm Events [FAQ](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf)
+  
+The analysis was made with RStudio (Version 0.98.932) on Windows7 64 bit and Ubuntu 12.04 32 bit. 
+
+#Loading and procesing data#
+
+The data was downloaded form the above given link and saved into **./data ** directory.
+Due to large amount of the data(unpaced data is abt. 560 Mb), it was desided to read data direct from *.bz2 archive. 
+
+```{r libraries}
+# just libraries, with I will need
+library(ggplot2)
+library(reshape2)
+library(xtable)
+library(datasets)
+```
+
+```{r reading.data, cache=TRUE}
+
+# copening connection to file
+fl <- bzfile("./data/repdata_data_StormData.csv.bz2", open="r")
+
+# Load data and assign it to variable "storm"
+storm <-read.csv(fl, stringsAsFactors=FALSE)
+
+# close conection
+close(fl)
+dim(storm)
+
+```
+
+##Procesing data##
+
+First, in order to have smaller data set, I indicate relevant columns and removes rest.
+
+```{r rem.colmn}
+colnm <- c("BGN_DATE", "STATE", "EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")
+
+sstorm <- storm[, colnm]
+```
+
+Then I have removed all events, that ocure not in the US. 
+
+```{r not.US}
+# only 50 US state and DC
+sstorm <- sstorm[sstorm$STATE %in% c(state.abb, "DC"), ]
+n <- dim(sstorm)[1]
+
+```
+
+The data frame now have only `r n` rows. 
+
+##Most harmful event with respect to population health##
+
+To answer this question we can simply count Fatalities and Injuries for each event. But also we can try to calculate "cost" (in respect of human lives and injuries) of the each weather event and then look to the each event from the "money point of view".
+
+In order to calculate "cost" of event I make such assumtions:
+- Human live cost in US is **7 000 000 USD**. Source for this is (Wikipedia)[http://en.wikipedia.org/wiki/Value_of_life]
+- Human injurie cost is **10 000 USD**. This is average healt insurance cost in the US according Wikipedia page (Healt care in the US)[http://en.wikipedia.org/wiki/Health_care_in_the_United_States]
+
+Because in the downloaded data frame weater events was coded "a litle messy", I decided to make a new group of event (total 20) and assign each event to this new event.
+
+I created new data frame with only data for Fatalities and Injuries.
+```{r FI.df, cache=TRUE, warning=FALSE}
+# subseting only with injuries and fatalities
+storm.healt <- subset(x = sstorm, subset = (sstorm$INJURIES!=0 | sstorm$FATALITIES!=0))
+
+# converting dates form string to Date
+storm.healt$BGN_DATE <- as.Date(storm.healt$BGN_DATE, "%m/%d/%Y")
+rownames(storm.healt) <- NULL
+
+# new df with the old and new categories
+kate <- c("TORNADO", "WIND", "HAIL", "FLOOD", "COLD", "HURRICANE", "FOG",
+          "RIP CURRENT", "WIND", "LIGHTNING", "HEAT", "RAIN", "COLD", 
+          "FLOOD", "FLOOD", "COLD", "WIND", "WIND", "WIND", "HIGH SEAS", "WIND", 
+          "STORM", "SLEET", "FLOOD", "WIND", "HEAT", "WIND", "SURF", 
+          "FIRE", "WIND", "WIND", "STORM", "WIND", "FLOOD", "SNOW", 
+          "FOG", "WIND", "WIND", "FLOOD", "WIND", "ICE", "HEAT", "HEAT", 
+          "WIND", "BILZZARD", "TORNADO", "HURRICANE", "TORNADO", "WIND", 
+          "STORM", "FLOOD", "HURRICANE", "TORNADO", "STORM", "STORM", "LIGHTNING", 
+          "STORM", "OTHER", "WIND", "FLOOD", "SNOW", "RAIN", "SNOW", 
+          "FLOOD", "HEAT", "WIND", "RAIN", "FOG", "SNOW", "WIND", "ICE", 
+          "SNOW", "FLOOD", "COLD", "LIGHTNING", "HURRICANE", "WIND", "COLD", "TORNADO", 
+          "FLOOD", "ICE", "AVALANCE", "SNOW", "RIP CURRENT", "COLD", 
+          "FOG", "SURF", "ICE", "HEAT", "TORNADO", "RIP CURRENT", 
+          "HURRICANE", "HURRICANE", "STORM", "SNOW", "SNOW", "RAIN", 
+          "HEAT", "SNOW", "HEAT", "HEAT", "COLD", "HEAT", "WIND", 
+          "TSUNAMI", "COLD", "COLD", "WIND", "COLD", "COLD", "WIND", 
+          "COLD", "FLOOD", "RAIN", "SNOW", "WIND", "WIND", "COLD", 
+          "FLOOD", "RAIN", "STORM", "FLOOD", "ICE", "OTHER", "WIND", 
+          "FLOOD", "FLOOD", "HEAT", "OTHER", "FLOOD", "WIND", "WIND", 
+          "FLOOD", "SURF", "FIRE", "FOG", "WIND", "SURF", "STORM", 
+          "HURRICANE", "SURF", "COLD", "RAIN", "HURRICANE", "STORM", 
+          "FLOOD", "WIND", "COLD", "WIND", "WIND", "SNOW", "OTHER", 
+          "COLD", "WIND", "MUDSLIDES", "MUDSLIDES", "COLD", "FLOOD", 
+          "COLD", "HEAT", "SNOW", "COLD", "RAIN", "SNOW", "COLD", 
+          "COLD", "ICE", "STORM", "WIND", "SNOW", "COLD", "SNOW", 
+          "WIND", "WIND", "HAIL", "FLOOD", "WIND", "WIND", "COLD", 
+          "COLD", "WIND", "SNOW", "ICE", "WIND", "WIND", "WIND", "HEAT",
+          "WIND", "FLOOD", "SNOW", "COLD", "WIND", "ICE", "WIND", 
+          "OTHER", "FIRE", "SURF", "ICE", "RAIN", "WIND", "FIRE", "SURF",
+          "COLD", "HURRICANE", "FLOOD", "FLOOD", "WIND", "STORM", 
+          "TSUNAMI")
+
+kategorijos <- data.frame(orig=unique(storm.healt$EVTYPE), 
+                          new=kate)
+
+
+storm.healt$NEVTYPE <- NA
+
+# changing from "old" to "new" categorie type
+
+for(i in 1:length(storm.healt$NEVTYPE)){
+    event <- paste("^", storm.healt$EVTYPE[i], "$", sep="")
+    if(grepl(pattern = ".*TSTM WIND.*", x=event)){
+        event <- "TSTM WIND"
+    }
+    if(grepl(pattern = ".*THUNDERSTORM WIND*", x=event)){
+        event <- "THUNDERSTORM WIND"
+    }
+    storm.healt$NEVTYPE[i] <- as.character(kategorijos$new[grep(pattern = event, x = kategorijos$orig)])
+    
+}
+
+storm.healt$NEVTYPE <- as.factor(storm.healt$NEVTYPE)
+
+# adding Fatalities and Injuries cost column
+storm.healt$FICOST <- (7000000*storm.healt$FATALITIES)+(10000*storm.healt$INJURIES)
+
+# summarizing all events to the one data frame
+FI.df <- aggregate(storm.healt[, c(4, 5, 11)], by=list(storm.healt$NEVTYPE), FUN=sum)
+FI.df <- FI.df[order(-FI.df$FICOST), ]
+
+# making cost a litle bit smoller for the picture
+FI.df$FICOST <- FI.df$FICOST/1000
+
+```
+
+After all this calculations we can drow the figures and see the trend.
+
+```{r plot1, fig.width=9, fig.height=6}
+
+# in order to plot 2 graps on one plot I use multiplot() function from Coocbook for R. Web link:
+# 
+
+# Multiple plot function
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+    require(grid)
+    
+    # Make a list from the ... arguments and plotlist
+    plots <- c(list(...), plotlist)
+    
+    numPlots = length(plots)
+    
+    # If layout is NULL, then use 'cols' to determine layout
+    if (is.null(layout)) {
+        # Make the panel
+        # ncol: Number of columns of plots
+        # nrow: Number of rows needed, calculated from # of cols
+        layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                         ncol = cols, nrow = ceiling(numPlots/cols))
+    }
+    
+    if (numPlots==1) {
+        print(plots[[1]])
+        
+    } else {
+        # Set up the page
+        grid.newpage()
+        pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+        
+        # Make each plot, in the correct location
+        for (i in 1:numPlots) {
+            # Get the i,j matrix positions of the regions that contain this subplot
+            matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+            
+            print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                            layout.pos.col = matchidx$col))
+        }
+    }
+}
+
+# making plots
+
+# Number of Fatalieties and Injuries
+FI.melt <- melt(FI.df[, 1:3], id.vars="Group.1", variable.name = "Victoms", 
+                value.name = "Rate")
+FI.melt$Victoms <- as.factor(FI.melt$Victoms)
+
+fig3.1 <- ggplot(data=FI.melt, aes(x=Group.1, y=Rate, colour=Victoms))
+fig3.1 <- fig3.1 + geom_point() + xlab("") + 
+    ylab("Number of Fatalieties and Injuries") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0))
+
+# cost of Fatalieties and Injuries
+
+# calculating upper point of the bar
+upper <- FI.df$FICOST + 20000
+
+# making plot
+fig4 <- ggplot(data=FI.df, 
+               aes(x=reorder(Group.1, FICOST), y=FICOST)) 
+fig4 <- fig4 + geom_bar(stat="identity")
+fig4 <- fig4 + xlab("") + ylab("Fatalities and Injuries cost, k$") + 
+    geom_text(aes(label = FICOST, y = upper), size = 3) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0))
+
+# ploting all together
+multiplot(fig3.1, fig4, layout=matrix(c(1,2), nrow=1, byrow=TRUE)) 
+
+
+```
+
+As we can see from the picture the bigest injuries and fatalies was from the Tronado, and the biges cost is also form tornado. 
+
+```{r print.FI, results='asis'}
+rownames(FI.df) <- NULL
+print(xtable(FI.df[1:10, ]), type="html")
+
+```
+
+#Which types of events have the greatest economic consequences?#
+
+Calculating economic cost
+
+```{r ec.cost, cache=TRUE}
+
+storm.healt$cost.total <- NA
+for(i in 1:dim(storm.healt)[1]){
+    property <- NA
+    if(storm.healt$PROPDMGEXP[i]=="H"){
+        property <- storm.healt$PROPDMG[i]*100
+    } else if(storm.healt$PROPDMGEXP[i]=="K"){
+        property <- storm.healt$PROPDMG[i]*1000
+    } else if((storm.healt$PROPDMGEXP[i]=="m") | (storm.healt$PROPDMGEXP[i]=="M")){
+        property <- storm.healt$PROPDMG[i]*1000000
+    } else if(storm.healt$PROPDMGEXP[i]=="B"){
+        property <- storm.healt$PROPDMG[i]*1000000000
+    } else {
+        property <- storm.healt$PROPDMG[i]
+    }
+    
+    crop <- NA
+    if(storm.healt$CROPDMGEXP[i]=="B"){
+        crop <- storm.healt$CROPDMG[i] * 1000000000
+    } else if (storm.healt$CROPDMGEXP[i]=="M") {
+        crop <- storm.healt$CROPDMG[i] * 1000000
+    } else if (storm.healt$CROPDMGEXP[i]=="K") {
+        crop <- storm.healt$CROPDMG[i] * 1000
+    } else {
+        crop <- storm.healt$CROPDMG[i]
+    }
+    
+    storm.healt$cost.total[i] <- crop + property
+}
+
+cost.df <- aggregate(storm.healt[, 12], by=list(storm.healt$NEVTYPE), FUN=sum)
+
+
+```
+
+Ploting cost
+
+```{r ploting.cost, fig.width=8, fig.height=6}
+colnames(cost.df) <- c("Event", "Cost")
+
+fig5 <- ggplot(data=cost.df, aes(x=reorder(Event, Cost), y=Cost)) + 
+    geom_bar(stat="identity") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0))+
+    xlab("")
+
+fig5
+```
+
+As we can see Tornados and hurricanes makes the most economic losses.
